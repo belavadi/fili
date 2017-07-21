@@ -4,6 +4,7 @@ package com.yahoo.bard.webservice.web.endpoints;
 
 import static com.yahoo.bard.webservice.config.BardFeatureFlag.UPDATED_METADATA_COLLECTION_NAMES;
 import static javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
+import static javax.ws.rs.core.Response.Status.OK;
 
 import com.yahoo.bard.webservice.application.ObjectMappersSuite;
 import com.yahoo.bard.webservice.data.config.ResourceDictionaries;
@@ -15,6 +16,7 @@ import com.yahoo.bard.webservice.table.LogicalTable;
 import com.yahoo.bard.webservice.table.LogicalTableDictionary;
 import com.yahoo.bard.webservice.table.PhysicalTable;
 import com.yahoo.bard.webservice.util.SimplifiedIntervalList;
+import com.yahoo.bard.webservice.web.ErrorMessageFormat;
 import com.yahoo.bard.webservice.web.RequestMapper;
 import com.yahoo.bard.webservice.web.RequestValidationException;
 import com.yahoo.bard.webservice.web.ResponseFormatResolver;
@@ -34,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -54,6 +57,7 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 
@@ -244,15 +248,16 @@ public class TablesServlet extends EndpointServlet implements BardConfigResource
                 apiRequest = (TablesApiRequest) requestMapper.apply(apiRequest, containerRequestContext);
             }
 
-            Map<String, Object> result = getLogicalTableFullView(apiRequest, uriInfo);
+            Map<String, Object> result = getLogicalTableFullView(apiRequest.getTable(), uriInfo);
             String output = objectMappers.getMapper().writeValueAsString(result);
             LOG.debug("Tables Endpoint Response: {}", output);
-            responseSender = () ->  Response.status(Response.Status.OK).entity(output).build();
+            responseSender = () ->  Response.status(OK).entity(output).build();
+            RequestLog.stopTiming(this);
         } catch (RequestValidationException e) {
             LOG.debug(e.getMessage(), e);
             responseSender = () ->   Response.status(e.getStatus()).entity(e.getErrorHttpMsg()).build();
         } catch (JsonProcessingException e) {
-            String msg = String.format("Internal server error. JsonProcessingException : %s", e.getMessage());
+            String msg = ErrorMessageFormat.JSON_PROCESSING_ERROR.format(e.getMessage());
             LOG.error(msg, e);
             responseSender = () -> Response.status(INTERNAL_SERVER_ERROR).entity(msg).build();
         } catch (Error | Exception e) {
@@ -265,6 +270,72 @@ public class TablesServlet extends EndpointServlet implements BardConfigResource
 
         return responseSender.get();
     }
+
+    //CHECKSTYLE:OFF
+    @GET
+    @Timed
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/{tableName}/{granularity}/{dimensions:.*}")
+    public Response getTableAvailability(
+            @PathParam("tableName") String tableName,
+            @PathParam("granularity") String granularity,
+            @PathParam("dimensions") List<PathSegment> dimensions,
+            @QueryParam("metrics") String metrics,
+            @QueryParam("dateTime") String intervals,
+            @QueryParam("filters") String filters,
+            @Context UriInfo uriInfo,
+            @Context final ContainerRequestContext containerRequestContext
+    ) {
+        String timePhaseName = "Constrained TablesApiRequest";
+        RequestLog.startTiming(timePhaseName);
+
+        TablesApiRequest tablesApiRequest = new TablesApiRequest(
+                tableName,
+                granularity,
+                null,
+                "",
+                "",
+                uriInfo,
+                this,
+                dimensions,
+                metrics,
+                intervals,
+                filters,
+                null
+        );
+
+        try {
+            if (requestMapper != null) {
+                tablesApiRequest = (TablesApiRequest) requestMapper.apply(tablesApiRequest, containerRequestContext);
+            }
+        } catch (RequestValidationException requestValidationException) {
+            LOG.debug(requestValidationException.getMessage(), requestValidationException);
+            RequestLog.stopTiming(timePhaseName);
+
+            return Response.status(requestValidationException.getStatus())
+                    .entity(requestValidationException.getErrorHttpMsg())
+                    .build();
+        }
+
+        try {
+            Map<String, Object> result = getLogicalTableFullView(tablesApiRequest, uriInfo);
+            String output = objectMappers.getMapper().writeValueAsString(result);
+
+            LOG.debug("Constrained Tables Endpoint Response: {}", output);
+            RequestLog.stopTiming(timePhaseName);
+
+            return Response.status(OK).entity(output).build();
+        } catch (JsonProcessingException jsonProcessingException) {
+            String message = ErrorMessageFormat.JSON_PROCESSING_ERROR.format(jsonProcessingException.getLocation());
+            LOG.error(message, jsonProcessingException);
+            RequestLog.stopTiming(timePhaseName);
+
+            return Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(message)
+                    .build();
+        }
+    }
+    //CHECKSTYLE:ON
 
     /**
      * Get all the tables full view.
