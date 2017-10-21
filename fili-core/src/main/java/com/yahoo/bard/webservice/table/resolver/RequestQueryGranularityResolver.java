@@ -26,7 +26,7 @@ public class RequestQueryGranularityResolver implements BiFunction<DataApiReques
      * Get the a granularity which must be satisfied by any answering table granularity for this request.
      * <p>
      * If a query has a time grain constraint, it will be returned as a granularity with the request time zone
-     * applied.  If the query has no constraint, the request grain will be returned as a granularity.
+     * applied. If the query has no constraint, the request grain will be returned as a granularity.
      *
      * @param apiRequest  DataApiRequest from the user which may specify a coarsest satisfying grain
      * @param query  Query which may apply a coarsest satisfying grain

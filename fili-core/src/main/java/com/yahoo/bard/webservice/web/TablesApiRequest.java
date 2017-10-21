@@ -442,4 +442,49 @@ public class TablesApiRequest extends ApiRequestImpl {
     public Granularity getGranularity() {
         return this.granularity;
     }
+
+    /**
+     * The set of grouping dimensions on this ApiRequest.
+     *
+     * @return a set of dimensions
+     */
+    public Set<Dimension> getDimensions() {
+        return dimensions;
+    }
+
+    /**
+     * The filters for this ApiRequest, grouped by dimensions.
+     *
+     * @return a map of filters by dimension
+     */
+    public Map<Dimension, Set<ApiFilter>> getFilters() {
+        return filters;
+    }
+
+    /**
+     * Get the dimensions used in filters on this request.
+     *
+     * @return A set of dimensions
+     */
+    public Set<Dimension> getFilterDimensions() {
+        return filters.keySet();
+    }
+
+    /**
+     * The intervals for this query.
+     *
+     * @return A set of intervals
+     */
+    public Set<Interval> getIntervals() {
+        return intervals;
+    }
+
+    /**
+     * The logical metrics requested in this query.
+     *
+     * @return A set of logical metrics
+     */
+    public Set<LogicalMetric> getLogicalMetrics() {
+        return metrics;
+    }
 }
